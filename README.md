@@ -151,7 +151,7 @@ The application uses Supabase PostgreSQL database with the following main tables
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/gardeining-planner-backend-server.git
+   git clone https://github.com/sangeetadey99/gardeining-planner-backend-server.git
    cd gardeining-planner-backend-server/gardeining-backend-server
    ```
 
