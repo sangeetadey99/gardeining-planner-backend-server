@@ -1,6 +1,50 @@
 -- Gardening Planner Database Schema for Supabase
 -- Run these SQL commands in your Supabase SQL Editor
 
+-- Users Table (for authentication and profile data)
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    avatar_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Plants Table
+CREATE TABLE IF NOT EXISTS plants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(255) NOT NULL,
+    sunlight VARCHAR(255),
+    watering_frequency VARCHAR(255),
+    planted_date DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Journal Entries Table
+CREATE TABLE IF NOT EXISTS journal_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    plant_id UUID REFERENCES plants(id) ON DELETE SET NULL,
+    note TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Tasks Table
+CREATE TABLE IF NOT EXISTS tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    plant_id UUID REFERENCES plants(id) ON DELETE SET NULL,
+    task_type VARCHAR(255) NOT NULL,
+    due_date DATE,
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Garden Layouts Table
 CREATE TABLE IF NOT EXISTS garden_layouts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -103,10 +147,13 @@ CREATE TABLE IF NOT EXISTS shared_gardens (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Add planted_date column to plants table if it doesn't exist
-ALTER TABLE plants ADD COLUMN IF NOT EXISTS planted_date DATE;
-
 -- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_plants_user_id ON plants(user_id);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_user_id ON journal_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_plant_id ON journal_entries(plant_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_plant_id ON tasks(plant_id);
 CREATE INDEX IF NOT EXISTS idx_garden_layouts_user_id ON garden_layouts(user_id);
 CREATE INDEX IF NOT EXISTS idx_pest_issues_user_id ON pest_issues(user_id);
 CREATE INDEX IF NOT EXISTS idx_pest_issues_plant_id ON pest_issues(plant_id);
@@ -124,6 +171,10 @@ CREATE INDEX IF NOT EXISTS idx_shared_gardens_user_id ON shared_gardens(user_id)
 CREATE INDEX IF NOT EXISTS idx_shared_gardens_tags ON shared_gardens USING GIN(tags);
 
 -- Enable Row Level Security (RLS)
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE plants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE garden_layouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pest_issues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seasonal_tasks ENABLE ROW LEVEL SECURITY;
@@ -134,6 +185,52 @@ ALTER TABLE community_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shared_gardens ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+-- Users (public read for profiles, user write for own data)
+CREATE POLICY "Anyone can view user profiles" ON users
+    FOR SELECT USING (true);
+
+CREATE POLICY "Users can update own profile" ON users
+    FOR UPDATE USING (auth.uid() = id);
+
+-- Plants
+CREATE POLICY "Users can view own plants" ON plants
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own plants" ON plants
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own plants" ON plants
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own plants" ON plants
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Journal Entries
+CREATE POLICY "Users can view own journal entries" ON journal_entries
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own journal entries" ON journal_entries
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own journal entries" ON journal_entries
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own journal entries" ON journal_entries
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Tasks
+CREATE POLICY "Users can view own tasks" ON tasks
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own tasks" ON tasks
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own tasks" ON tasks
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own tasks" ON tasks
+    FOR DELETE USING (auth.uid() = user_id);
+
 -- Garden Layouts
 CREATE POLICY "Users can view own garden layouts" ON garden_layouts
     FOR SELECT USING (auth.uid() = user_id);
@@ -248,6 +345,18 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
+CREATE TRIGGER update_users_updated_at 
+    BEFORE UPDATE ON users 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_plants_updated_at 
+    BEFORE UPDATE ON plants 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tasks_updated_at 
+    BEFORE UPDATE ON tasks 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_garden_layouts_updated_at 
     BEFORE UPDATE ON garden_layouts 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
